@@ -105,7 +105,9 @@ def scan_github_repo(owner_repo, default_branch, logger):
 
 def run_github_scan(args, logger):
     """Run GitHub repository scan."""
-    from litellm_vuln_scanner.github_client import check_auth, get_user_repos
+    from litellm_vuln_scanner.github_client import (
+        check_auth, get_user_repos, get_specific_user_repos, get_org_repos,
+    )
 
     logger.info("=== GitHub リポジトリスキャン ===")
     logger.info("認証状態を確認中...")
@@ -115,7 +117,18 @@ def run_github_scan(args, logger):
 
     repos_filter = args.repos.split(",") if args.repos else None
     logger.info("リポジトリ一覧を取得中...")
-    repos = get_user_repos(username, repos_filter)
+
+    if args.user:
+        target_user = args.user
+        logger.info(f"対象ユーザー: {target_user}")
+        repos = get_specific_user_repos(target_user, repos_filter)
+    elif args.org:
+        target_org = args.org
+        logger.info(f"対象 Organization: {target_org}")
+        repos = get_org_repos(target_org, repos_filter)
+    else:
+        repos = get_user_repos(username, repos_filter)
+
     logger.info(f"対象リポジトリ数: {len(repos)}")
     logger.debug(f"リポジトリ一覧: {[r['full_name'] for r in repos]}")
 
@@ -191,7 +204,15 @@ def main():
     )
     parser.add_argument(
         "--repos",
-        help="GitHub スキャン対象リポジトリ (カンマ区切り, 例: repo1,repo2)",
+        help="GitHub スキャン対象リポジトリ (カンマ区切り, 例: org/repo1,user/repo2)",
+    )
+    parser.add_argument(
+        "--user",
+        help="指定ユーザーのリポジトリをスキャン (例: aRaikoFunakami)",
+    )
+    parser.add_argument(
+        "--org",
+        help="指定 Organization のリポジトリをスキャン (例: access-company)",
     )
     parser.add_argument(
         "--local",
@@ -199,16 +220,25 @@ def main():
     )
     args = parser.parse_args()
 
-    if not args.repos and not args.local:
+    if args.user and args.org:
+        parser.error("--user と --org は同時に指定できません")
+
+    # Determine if GitHub scan should run
+    has_github_args = args.repos is not None or args.user is not None or args.org is not None
+    if not has_github_args and not args.local:
         # Default: GitHub scan all repos
         args._github_mode = True
     else:
-        args._github_mode = args.repos is not None or (not args.local)
+        args._github_mode = has_github_args or (not args.local)
 
     # Build descriptive scan label
     label_parts = []
-    if args.repos is not None or (not args.local):
-        if args.repos:
+    if args._github_mode:
+        if args.user:
+            label_parts.append(f"user_{args.user}")
+        elif args.org:
+            label_parts.append(f"org_{args.org}")
+        elif args.repos:
             first_repo = args.repos.split(",")[0].strip().replace("/", "_")
             label_parts.append(f"github_{first_repo}")
         else:
@@ -233,7 +263,7 @@ def main():
     all_installed = []
 
     # GitHub scan
-    if args.repos is not None or (not args.local):
+    if args._github_mode:
         gh_findings, gh_files, gh_repos = run_github_scan(args, logger)
         all_findings.extend(gh_findings)
         total_files += gh_files

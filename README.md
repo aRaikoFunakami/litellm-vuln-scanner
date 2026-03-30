@@ -64,17 +64,23 @@ uv tool install git+https://github.com/aRaikoFunakami/litellm-vuln-scanner
 ## 使い方
 
 ```bash
-# GitHub: 認証ユーザーの全リポジトリをスキャン
+# GitHub: 認証ユーザーがアクセス可能な全リポジトリをスキャン（個人 + Organization）
 litellm-vuln-scanner
 
-# GitHub: 特定リポジトリのみ
-litellm-vuln-scanner --repos owner/repo1,owner/repo2
+# 特定ユーザーのリポジトリのみ
+litellm-vuln-scanner --user aRaikoFunakami
+
+# Organization のリポジトリのみ
+litellm-vuln-scanner --org access-company
+
+# 特定リポジトリを直接指定
+litellm-vuln-scanner --repos myorg/repo1,myorg/repo2
 
 # ローカル: 指定ディレクトリ配下をスキャン
 litellm-vuln-scanner --local ~/GitHub
 
-# 両方同時
-litellm-vuln-scanner --repos owner/repo1 --local ~/projects
+# GitHub + ローカル同時スキャン
+litellm-vuln-scanner --org myorg --local ~/projects
 
 # 出力先を指定（デフォルトは logs/YYYYMMDD_HHMMSS_TZ_label/ に自動生成）
 litellm-vuln-scanner --local ~/GitHub --output-dir ./my_results

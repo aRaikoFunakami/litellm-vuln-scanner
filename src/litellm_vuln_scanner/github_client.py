@@ -23,6 +23,8 @@ DEPENDENCY_FILE_PATTERNS = [
 _ALLOWED_GH_SUBCOMMANDS = {"api", "auth"}
 _ALLOWED_API_PATH_PREFIXES = (
     "/user",
+    "/users/",
+    "/orgs/",
     "/repos/",
     "/search/",
 )
@@ -142,34 +144,58 @@ def check_auth():
     return result.stdout.strip()
 
 
+_REPO_JQ = '[.[] | {full_name: .full_name, default_branch: .default_branch, fork: .fork, archived: .archived}]'
+
+
+def _filter_repos(repos, repos_filter):
+    """Filter repos by full_name or short name."""
+    if not repos_filter:
+        return repos
+    filter_set = {r.strip() for r in repos_filter}
+    return [
+        r for r in repos
+        if r["full_name"] in filter_set
+        or r["full_name"].split("/")[-1] in filter_set
+    ]
+
+
 def get_user_repos(username=None, repos_filter=None):
     """Get all repositories for the authenticated user.
 
-    Args:
-        username: GitHub username (used for filtering).
-        repos_filter: Optional list of repo names to filter.
-
-    Returns:
-        List of repo dicts with 'full_name' and 'default_branch'.
+    Returns repos the authenticated user has access to (personal + orgs).
     """
     data = _run_gh([
         "api", "/user/repos",
         "--paginate",
-        "--jq", '[.[] | {full_name: .full_name, default_branch: .default_branch, fork: .fork, archived: .archived}]',
+        "--jq", _REPO_JQ,
     ])
-    if not data:
-        return []
+    return _filter_repos(data or [], repos_filter)
 
-    repos = data
-    if repos_filter:
-        filter_set = {r.strip() for r in repos_filter}
-        repos = [
-            r for r in repos
-            if r["full_name"] in filter_set
-            or r["full_name"].split("/")[-1] in filter_set
-        ]
 
-    return repos
+def get_specific_user_repos(username, repos_filter=None):
+    """Get public repositories for a specific GitHub user.
+
+    Uses /users/{username}/repos endpoint.
+    """
+    data = _run_gh([
+        "api", f"/users/{username}/repos",
+        "--paginate",
+        "--jq", _REPO_JQ,
+    ])
+    return _filter_repos(data or [], repos_filter)
+
+
+def get_org_repos(org, repos_filter=None):
+    """Get repositories for a GitHub organization.
+
+    Uses /orgs/{org}/repos endpoint.
+    """
+    data = _run_gh([
+        "api", f"/orgs/{org}/repos",
+        "--paginate",
+        "--jq", _REPO_JQ,
+    ])
+    return _filter_repos(data or [], repos_filter)
 
 
 def get_dependency_files(owner_repo, default_branch):
