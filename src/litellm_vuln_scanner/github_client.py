@@ -1,6 +1,7 @@
 """GitHub API client using gh CLI."""
 
 import json
+import shutil
 import subprocess
 import sys
 import time
@@ -128,13 +129,22 @@ def _run_gh(args, ignore_errors=False):
 
 
 def check_auth():
-    """Verify gh CLI is authenticated. Returns username or exits."""
+    """Verify gh CLI is installed and authenticated. Returns username or exits."""
+    if not shutil.which("gh"):
+        print("Error: GitHub CLI (gh) がインストールされていません。", file=sys.stderr)
+        print("", file=sys.stderr)
+        print("インストール方法:", file=sys.stderr)
+        print("  Mac:   brew install gh", file=sys.stderr)
+        print("  Linux: https://github.com/cli/cli/blob/trunk/docs/install_linux.md", file=sys.stderr)
+        print("", file=sys.stderr)
+        print("インストール後に 'gh auth login' で認証してください。", file=sys.stderr)
+        sys.exit(1)
     result = subprocess.run(
         ["gh", "auth", "status"], capture_output=True, text=True
     )
     if result.returncode != 0:
-        print("Error: gh CLI is not authenticated.", file=sys.stderr)
-        print("Run 'gh auth login' first.", file=sys.stderr)
+        print("Error: gh CLI が認証されていません。", file=sys.stderr)
+        print("'gh auth login' を実行してください。", file=sys.stderr)
         sys.exit(1)
     # --jq returns raw string, not JSON
     result = subprocess.run(
