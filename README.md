@@ -56,7 +56,7 @@ gh auth login
 uv tool install /path/to/litellm_vuln_scanner
 
 # または GitHub から直接
-uv tool install git+https://github.com/aRaikoFunakami/litellm_vuln_scanner
+uv tool install git+https://github.com/aRaikoFunakami/litellm-vuln-scanner
 ```
 
 開発時はリポジトリ内で `uv sync` してから `uv run litellm-vuln-scanner` でも実行可能。
