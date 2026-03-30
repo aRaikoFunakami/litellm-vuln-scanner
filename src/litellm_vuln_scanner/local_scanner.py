@@ -174,10 +174,35 @@ def scan_local(root_dir, logger=None):
     findings = []
     root_dir = os.path.abspath(root_dir)
 
+    # 0. List all subdirectories for audit trail
+    subdirs = []
+    try:
+        subdirs = sorted([
+            d for d in os.listdir(root_dir)
+            if os.path.isdir(os.path.join(root_dir, d)) and not d.startswith(".")
+        ])
+    except OSError:
+        pass
+    if logger and subdirs:
+        logger.info(f"  サブディレクトリ一覧 ({len(subdirs)}件): {subdirs}")
+
     # 1. Scan dependency files
     dep_files = find_dependency_files(root_dir)
     if logger:
-        logger.debug(f"  依存ファイル {len(dep_files)}件検出")
+        logger.info(f"  依存ファイル {len(dep_files)}件検出")
+        for f in dep_files:
+            logger.info(f"    - {os.path.relpath(f, root_dir)}")
+
+        # Report directories with no dependency files
+        if subdirs:
+            dirs_with_deps = set()
+            for f in dep_files:
+                rel = os.path.relpath(f, root_dir)
+                top_dir = rel.split(os.sep)[0]
+                dirs_with_deps.add(top_dir)
+            dirs_without = [d for d in subdirs if d not in dirs_with_deps]
+            if dirs_without:
+                logger.info(f"  依存ファイルなし ({len(dirs_without)}件): {dirs_without}")
 
     for file_path in dep_files:
         parser = get_parser(file_path)
