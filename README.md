@@ -45,6 +45,9 @@ uv tool install git+https://github.com/aRaikoFunakami/vuln-scanner
 ## 使い方
 
 ```bash
+# ローカルディレクトリをスキャン（推移的依存も含め最も確実）
+vuln-scanner --local ~/GitHub
+
 # GitHub: 認証ユーザーの全リポジトリをスキャン
 vuln-scanner
 
@@ -56,9 +59,6 @@ vuln-scanner --org access-company
 
 # 特定リポジトリを直接指定
 vuln-scanner --repos myorg/repo1,myorg/repo2
-
-# ローカルディレクトリをスキャン
-vuln-scanner --local ~/GitHub
 
 # GitHub + ローカル同時スキャン
 vuln-scanner --org myorg --local ~/projects
