@@ -1,23 +1,36 @@
-"""Parse dependency files and detect vulnerable litellm versions."""
+"""Parse dependency files and detect supply chain attack vulnerabilities.
 
+Supports:
+- LiteLLM (Python/PyPI): v1.82.7, v1.82.8
+- axios (npm): v1.14.1, v0.30.4 + plain-crypto-js
+"""
+
+import json
 import re
 
-# Vulnerable versions
-VULNERABLE_VERSIONS = {"1.82.7", "1.82.8"}
-
-# Direct target package
-DIRECT_PACKAGE = "litellm"
-
-# Indirect dependency packages (use litellm internally)
-INDIRECT_PACKAGES = {"openhands", "dspy", "agentops", "langfuse", "mlflow"}
-
-ALL_PACKAGES = {DIRECT_PACKAGE} | INDIRECT_PACKAGES
-
-# Verdict constants
+# ── Verdict constants ──
 VULNERABLE = "VULNERABLE"
 SAFE = "SAFE"
 WARNING = "WARNING"
 CHECK_INDIRECT = "CHECK_INDIRECT"
+
+# ── Threat: LiteLLM (Python/PyPI) ──
+LITELLM_VULNERABLE_VERSIONS = {"1.82.7", "1.82.8"}
+LITELLM_DIRECT_PACKAGE = "litellm"
+LITELLM_INDIRECT_PACKAGES = {"openhands", "dspy", "agentops", "langfuse", "mlflow"}
+LITELLM_ALL_PACKAGES = {LITELLM_DIRECT_PACKAGE} | LITELLM_INDIRECT_PACKAGES
+
+# ── Threat: axios (npm) ──
+AXIOS_VULNERABLE_VERSIONS = {"1.14.1", "0.30.4"}
+AXIOS_DIRECT_PACKAGE = "axios"
+AXIOS_MALICIOUS_PACKAGES = {"plain-crypto-js"}
+AXIOS_ALL_PACKAGES = {AXIOS_DIRECT_PACKAGE} | AXIOS_MALICIOUS_PACKAGES
+
+# Backward-compatible aliases (used by local_scanner, etc.)
+VULNERABLE_VERSIONS = LITELLM_VULNERABLE_VERSIONS
+DIRECT_PACKAGE = LITELLM_DIRECT_PACKAGE
+INDIRECT_PACKAGES = LITELLM_INDIRECT_PACKAGES
+ALL_PACKAGES = LITELLM_ALL_PACKAGES
 
 
 def parse_requirements_txt(content):
@@ -176,8 +189,129 @@ def parse_dockerfile(content):
     return results
 
 
+# ── npm parsers ──
+
+def _extract_semver(version_str):
+    """Extract the semver portion from an npm version specifier.
+
+    E.g. "^1.14.0" -> "1.14.0", "~0.30.4" -> "0.30.4", "1.14.1" -> "1.14.1"
+    """
+    if not version_str:
+        return None
+    m = re.search(r"(\d+\.\d+\.\d+)", version_str)
+    return m.group(1) if m else None
+
+
+def parse_package_json(content):
+    """Parse package.json for axios and plain-crypto-js."""
+    results = []
+    try:
+        data = json.loads(content)
+    except (json.JSONDecodeError, ValueError):
+        return results
+    for section in ("dependencies", "devDependencies", "optionalDependencies",
+                    "peerDependencies"):
+        deps = data.get(section)
+        if not isinstance(deps, dict):
+            continue
+        for pkg_name, ver_spec in deps.items():
+            if pkg_name.lower() in AXIOS_ALL_PACKAGES:
+                ver = _extract_semver(ver_spec) if isinstance(ver_spec, str) else None
+                results.append((pkg_name.lower(), ver))
+    return results
+
+
+def parse_package_lock_json(content):
+    """Parse package-lock.json (v2/v3 and v1 formats)."""
+    results = []
+    try:
+        data = json.loads(content)
+    except (json.JSONDecodeError, ValueError):
+        return results
+
+    # v2/v3 format: "packages" key with "node_modules/..." keys
+    packages = data.get("packages")
+    if isinstance(packages, dict):
+        for key, info in packages.items():
+            # key is "" (root) or "node_modules/axios" etc.
+            pkg_name = key.rsplit("/", 1)[-1] if "/" in key else key
+            if pkg_name.lower() in AXIOS_ALL_PACKAGES:
+                ver = info.get("version")
+                results.append((pkg_name.lower(), ver))
+
+    # v1 format: "dependencies" key
+    deps = data.get("dependencies")
+    if isinstance(deps, dict):
+        for pkg_name, info in deps.items():
+            if pkg_name.lower() in AXIOS_ALL_PACKAGES:
+                ver = info.get("version") if isinstance(info, dict) else None
+                results.append((pkg_name.lower(), ver))
+            # Check nested dependencies (transitive)
+            if isinstance(info, dict) and "dependencies" in info:
+                for sub_name, sub_info in info["dependencies"].items():
+                    if sub_name.lower() in AXIOS_ALL_PACKAGES:
+                        sub_ver = sub_info.get("version") if isinstance(sub_info, dict) else None
+                        results.append((sub_name.lower(), sub_ver))
+
+    # Deduplicate
+    seen = set()
+    unique = []
+    for pkg, ver in results:
+        key = (pkg, ver)
+        if key not in seen:
+            seen.add(key)
+            unique.append((pkg, ver))
+    return unique
+
+
+def parse_yarn_lock(content):
+    """Parse yarn.lock for axios and plain-crypto-js."""
+    results = []
+    current_pkg = None
+    for line in content.splitlines():
+        # yarn.lock entry header: "axios@^1.14.0:" or "axios@^1.14.0, axios@^1.0.0:"
+        if not line.startswith(" ") and line.endswith(":"):
+            header = line.rstrip(":")
+            # Extract package names from header
+            parts = [p.strip().strip('"') for p in header.split(",")]
+            pkg_name = None
+            for part in parts:
+                # "axios@^1.14.0" -> "axios"
+                at_idx = part.rfind("@")
+                if at_idx > 0:
+                    name = part[:at_idx]
+                elif at_idx == 0:
+                    # Scoped package like @scope/pkg
+                    continue
+                else:
+                    name = part
+                if name.lower() in AXIOS_ALL_PACKAGES:
+                    pkg_name = name.lower()
+                    break
+            current_pkg = pkg_name
+        elif current_pkg and line.strip().startswith("version"):
+            m = re.match(r'\s+version\s+"?([^"]+)"?', line)
+            if m:
+                results.append((current_pkg, m.group(1)))
+            current_pkg = None
+    return results
+
+
+def parse_pnpm_lock(content):
+    """Parse pnpm-lock.yaml for axios and plain-crypto-js (simple regex)."""
+    results = []
+    # Match patterns like: /axios@1.14.1: or axios@1.14.1:
+    for m in re.finditer(r"/?([a-zA-Z0-9_-]+)@(\d+\.\d+\.\d+[^:]*?):", content):
+        pkg = m.group(1).lower()
+        ver = m.group(2)
+        if pkg in AXIOS_ALL_PACKAGES:
+            results.append((pkg, ver))
+    return results
+
+
 # Map file patterns to parsers
 PARSERS = {
+    # Python ecosystem
     "requirements": parse_requirements_txt,
     "pyproject.toml": parse_pyproject_toml,
     "Pipfile.lock": parse_pipfile_lock,
@@ -186,12 +320,18 @@ PARSERS = {
     "setup.py": parse_setup_py,
     "setup.cfg": parse_setup_cfg,
     "Dockerfile": parse_dockerfile,
+    # npm ecosystem
+    "package.json": parse_package_json,
+    "package-lock.json": parse_package_lock_json,
+    "yarn.lock": parse_yarn_lock,
+    "pnpm-lock.yaml": parse_pnpm_lock,
 }
 
 
 def get_parser(file_path):
     """Get the appropriate parser for a file path."""
     basename = file_path.rsplit("/", 1)[-1] if "/" in file_path else file_path
+    # Python ecosystem
     if basename == "Pipfile.lock":
         return PARSERS["Pipfile.lock"]
     if basename == "Pipfile":
@@ -208,23 +348,44 @@ def get_parser(file_path):
         return PARSERS["setup.cfg"]
     if "Dockerfile" in basename or "dockerfile" in basename:
         return PARSERS["Dockerfile"]
+    # npm ecosystem
+    if basename == "package-lock.json":
+        return PARSERS["package-lock.json"]
+    if basename == "package.json":
+        return PARSERS["package.json"]
+    if basename == "yarn.lock":
+        return PARSERS["yarn.lock"]
+    if basename == "pnpm-lock.yaml":
+        return PARSERS["pnpm-lock.yaml"]
     return None
 
 
 def judge(package_name, version):
-    """Judge the vulnerability status.
+    """Judge the vulnerability status for both Python and npm ecosystems.
 
     Returns:
         (verdict, note) tuple.
     """
     normalized = package_name.lower().replace("-", "_")
 
-    if normalized in INDIRECT_PACKAGES:
+    # ── LiteLLM (Python) ──
+    if normalized in LITELLM_INDIRECT_PACKAGES:
         return CHECK_INDIRECT, "litellmを間接依存として利用するパッケージ"
+    if normalized == "litellm":
+        if version and version in LITELLM_VULNERABLE_VERSIONS:
+            return VULNERABLE, f"脆弱バージョン {version} を使用"
+        if version:
+            return SAFE, f"バージョン {version} は安全"
+        return WARNING, "バージョン未指定（脆弱バージョンがインストールされた可能性あり）"
 
-    # Direct litellm
-    if version and version in VULNERABLE_VERSIONS:
-        return VULNERABLE, f"脆弱バージョン {version} を使用"
-    if version:
-        return SAFE, f"バージョン {version} は安全"
-    return WARNING, "バージョン未指定（脆弱バージョンがインストールされた可能性あり）"
+    # ── axios (npm) ──
+    if normalized == "plain_crypto_js":
+        return VULNERABLE, "悪意あるパッケージ plain-crypto-js を検出（axiosサプライチェーン攻撃）"
+    if normalized == "axios":
+        if version and version in AXIOS_VULNERABLE_VERSIONS:
+            return VULNERABLE, f"脆弱バージョン {version} を使用（axiosサプライチェーン攻撃）"
+        if version:
+            return SAFE, f"バージョン {version} は安全"
+        return WARNING, "バージョン未指定（脆弱バージョンがインストールされた可能性あり）"
+
+    return SAFE, "対象外パッケージ"

@@ -1,11 +1,12 @@
 [project]
-name = "litellm-vuln-scanner"
-version = "0.1.0"
-description = "LiteLLM supply chain attack scanner for GitHub repos and local environments"
+name = "supply-chain-scanner"
+version = "0.2.0"
+description = "Supply chain attack scanner (LiteLLM + axios) for GitHub repos and local environments"
 requires-python = ">=3.9"
 dependencies = []
 
 [project.scripts]
+supply-chain-scanner = "litellm_vuln_scanner.scanner:main"
 litellm-vuln-scanner = "litellm_vuln_scanner.scanner:main"
 
 [build-system]

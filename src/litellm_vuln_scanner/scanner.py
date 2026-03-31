@@ -1,8 +1,9 @@
 #!/usr/bin/env python3
-"""LiteLLM supply chain attack scanner.
+"""Supply chain attack scanner.
 
-Scans GitHub repositories and/or local directories for usage of
-litellm (v1.82.7/v1.82.8) and related packages.
+Scans GitHub repositories and/or local directories for:
+- LiteLLM (Python/PyPI): v1.82.7, v1.82.8
+- axios (npm): v1.14.1, v0.30.4 + plain-crypto-js
 """
 
 import argparse
@@ -196,7 +197,7 @@ def run_local_scan(args, logger):
 
 def main():
     parser = argparse.ArgumentParser(
-        description="LiteLLM サプライチェーン攻撃スキャナー（GitHub / ローカル対応）"
+        description="サプライチェーン攻撃スキャナー — LiteLLM (Python) + axios (npm) 対応"
     )
     parser.add_argument(
         "--output-dir",
@@ -246,7 +247,7 @@ def main():
     if args.local:
         first_dir = os.path.basename(os.path.abspath(args.local.split(",")[0].strip()))
         label_parts.append(f"local_{first_dir}")
-    scan_label = "_".join(label_parts) or "litellm_scan"
+    scan_label = "_".join(label_parts) or "supply_chain_scan"
 
     # --output-dir 指定があればそれを最優先、なければ logs/ 配下に自動生成
     if args.output_dir:
@@ -278,9 +279,9 @@ def main():
         all_installed.extend(installed)
 
     # Output results
-    csv_path = os.path.join(output_dir, "litellm_scan_results.csv")
-    json_path = os.path.join(output_dir, "litellm_scan_results.json")
-    md_path = os.path.join(output_dir, "litellm_scan_report.md")
+    csv_path = os.path.join(output_dir, "scan_results.csv")
+    json_path = os.path.join(output_dir, "scan_results.json")
+    md_path = os.path.join(output_dir, "scan_report.md")
 
     generate_csv(all_findings, csv_path)
     generate_json(all_findings, json_path)
