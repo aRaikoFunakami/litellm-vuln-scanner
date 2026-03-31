@@ -238,6 +238,11 @@ def generate_markdown(findings, total_repos, total_files, scanned_repos, output_
         lines.append("4. **ファイル内容取得**: `gh api /repos/{owner}/{repo}/contents/{path}` で Base64 エンコードされた内容を取得・デコード")
         lines.append("5. **パッケージ検出**: 各ファイル形式に応じたパーサーで対象パッケージの使用有無とバージョンを抽出")
         lines.append("")
+        lines.append("> **GitHub スキャンの制限事項**: lockfile（`poetry.lock`, `Pipfile.lock`, `package-lock.json`, `yarn.lock` 等）が")
+        lines.append("> リポジトリに含まれていない場合、**推移的依存（他のパッケージ経由で間接的にインストールされる脆弱パッケージ）は検出できません**。")
+        lines.append("> 依存ファイルに直接記載されたパッケージと、`indirect_packages` として事前登録されたパッケージのみが検出対象です。")
+        lines.append("> より確実な調査には、対象リポジトリを `git clone` してローカルスキャン（`--local`）を実行してください。")
+        lines.append("")
         lines.append("> **安全性**: 全 API 呼び出しは `gh` CLI 経由の GET リクエストのみです。")
         lines.append("> ツール内部のバリデーション（`_validate_gh_args`）により、")
         lines.append("> 書き込み操作（POST/PUT/PATCH/DELETE）、許可リスト外の API パス、")
@@ -250,9 +255,16 @@ def generate_markdown(findings, total_repos, total_files, scanned_repos, output_
         lines.append("1. **依存ファイル検索**: 指定ディレクトリ配下を再帰的に走査し、全脅威モジュールのパターンに一致するファイルを収集")
         lines.append("2. **ファイル内容パース**: 各ファイルを直接読み取り、対象パッケージの使用有無とバージョンを抽出")
         lines.append("3. **インストール済みパッケージ確認**: 各脅威モジュールがエコシステム固有のチェックを実行")
+        lines.append("   - Python: `pip freeze` / `uv pip freeze` によるシステム Python と仮想環境の確認")
+        lines.append("   - npm: `npm list` および `node_modules/` 内のパッケージ直接確認")
         lines.append("4. **悪意あるディレクトリ検索**: 各脅威モジュールが既知の悪意あるパッケージのディレクトリを検索")
         lines.append("5. **マルウェア痕跡確認**: 各脅威モジュールが OS 別の既知マルウェアファイルパスを確認")
         lines.append("6. **バージョン補完**: lockfile や実環境の情報で未指定バージョンを補完")
+        lines.append("")
+        lines.append("> **ローカルスキャンの利点**: GitHub スキャンとは異なり、ローカル環境では実際にインストールされた")
+        lines.append("> パッケージとバージョンを直接確認できます。lockfile がないプロジェクトでも、`pip freeze` や")
+        lines.append("> `node_modules/` から推移的依存を含む正確なバージョン情報を取得できるため、")
+        lines.append("> **間接的にインストールされた脆弱パッケージも検出可能**です。")
         lines.append("")
 
     lines.append("### 判定ロジック")
@@ -273,7 +285,7 @@ def generate_markdown(findings, total_repos, total_files, scanned_repos, output_
     lines.append("")
 
     lines.append("---")
-    lines.append(f"*本レポートは supply-chain-scanner により自動生成されました（{now}）*")
+    lines.append(f"*本レポートは vuln-scanner により自動生成されました（{now}）*")
     lines.append("")
 
     with open(output_path, "w", encoding="utf-8") as f:
