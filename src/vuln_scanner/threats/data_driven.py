@@ -11,7 +11,7 @@ import re
 from types import ModuleType
 from typing import Any, Callable, Dict, List, Optional, Set, Tuple
 
-from litellm_vuln_scanner.threats.base import (
+from vuln_scanner.threats.base import (
     CHECK_INDIRECT,
     SAFE,
     VULNERABLE,

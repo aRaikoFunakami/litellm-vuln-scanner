@@ -12,8 +12,8 @@ import sys
 import os
 from datetime import datetime
 
-from litellm_vuln_scanner.threats import get_parser, judge
-from litellm_vuln_scanner.reporter import generate_csv, generate_json, generate_markdown, print_summary
+from vuln_scanner.threats import get_parser, judge
+from vuln_scanner.reporter import generate_csv, generate_json, generate_markdown, print_summary
 
 
 def build_output_dir(scan_label):
@@ -65,7 +65,7 @@ def setup_logging(output_dir, scan_label):
 
 def scan_github_repo(owner_repo, default_branch, logger):
     """Scan a single GitHub repository for vulnerable dependencies."""
-    from litellm_vuln_scanner.github_client import get_dependency_files, get_file_content
+    from vuln_scanner.github_client import get_dependency_files, get_file_content
 
     findings = []
     dep_files = get_dependency_files(owner_repo, default_branch)
@@ -106,7 +106,7 @@ def scan_github_repo(owner_repo, default_branch, logger):
 
 def run_github_scan(args, logger):
     """Run GitHub repository scan."""
-    from litellm_vuln_scanner.github_client import (
+    from vuln_scanner.github_client import (
         check_auth, get_user_repos, get_specific_user_repos, get_org_repos,
     )
 
@@ -166,7 +166,7 @@ def run_github_scan(args, logger):
 
 def run_local_scan(args, logger):
     """Run local directory scan."""
-    from litellm_vuln_scanner.local_scanner import scan_local
+    from vuln_scanner.local_scanner import scan_local
 
     dirs = [d.strip() for d in args.local.split(",")]
     logger.info("=== ローカルディレクトリスキャン ===")

@@ -8,7 +8,7 @@ import time
 import base64
 
 # Dependency file patterns — dynamically collected from registered threats.
-from litellm_vuln_scanner.threats import get_all_file_patterns_regex
+from vuln_scanner.threats import get_all_file_patterns_regex
 DEPENDENCY_FILE_PATTERNS = get_all_file_patterns_regex()
 
 

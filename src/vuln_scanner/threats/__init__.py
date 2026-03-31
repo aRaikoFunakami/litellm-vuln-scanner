@@ -10,7 +10,7 @@ import json
 import os
 from typing import Callable, List, Optional, Set, Tuple
 
-from litellm_vuln_scanner.threats.base import (  # noqa: F401 – re-export
+from vuln_scanner.threats.base import (  # noqa: F401 – re-export
     VULNERABLE,
     SAFE,
     WARNING,
@@ -108,9 +108,9 @@ def judge(package_name: str, version: Optional[str]) -> Tuple[str, str]:
 
 # ── Auto-load threats from JSON ─────────────────────────────────────────────
 
-from litellm_vuln_scanner.threats.data_driven import DataDrivenThreat  # noqa: E402
-from litellm_vuln_scanner.threats.ecosystems import python as _py_eco  # noqa: E402
-from litellm_vuln_scanner.threats.ecosystems import npm as _npm_eco  # noqa: E402
+from vuln_scanner.threats.data_driven import DataDrivenThreat  # noqa: E402
+from vuln_scanner.threats.ecosystems import python as _py_eco  # noqa: E402
+from vuln_scanner.threats.ecosystems import npm as _npm_eco  # noqa: E402
 
 _ECOSYSTEM_MODULES = {
     "python": _py_eco,

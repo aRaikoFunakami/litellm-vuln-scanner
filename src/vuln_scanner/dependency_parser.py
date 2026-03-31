@@ -5,7 +5,7 @@ the public API so that existing callers continue to work unchanged.
 """
 
 # ── Verdict constants ───────────────────────────────────────────────────────
-from litellm_vuln_scanner.threats.base import (  # noqa: F401
+from vuln_scanner.threats.base import (  # noqa: F401
     VULNERABLE,
     SAFE,
     WARNING,
@@ -13,14 +13,14 @@ from litellm_vuln_scanner.threats.base import (  # noqa: F401
 )
 
 # ── Aggregate dispatch ──────────────────────────────────────────────────────
-from litellm_vuln_scanner.threats import (  # noqa: F401
+from vuln_scanner.threats import (  # noqa: F401
     judge,
     get_parser,
     get_all_threats as _get_all_threats,
 )
 
 # ── Parser functions (backward compat) ──────────────────────────────────────
-from litellm_vuln_scanner.threats.ecosystems.python import (  # noqa: F401
+from vuln_scanner.threats.ecosystems.python import (  # noqa: F401
     parse_requirements_txt,
     parse_pyproject_toml,
     parse_pipfile,
@@ -30,7 +30,7 @@ from litellm_vuln_scanner.threats.ecosystems.python import (  # noqa: F401
     parse_setup_cfg,
     parse_dockerfile,
 )
-from litellm_vuln_scanner.threats.ecosystems.npm import (  # noqa: F401
+from vuln_scanner.threats.ecosystems.npm import (  # noqa: F401
     parse_package_json,
     parse_package_lock_json,
     parse_yarn_lock,

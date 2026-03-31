@@ -6,13 +6,13 @@ Generic scanner that delegates ecosystem-specific logic to threat modules.
 import glob
 import os
 
-from litellm_vuln_scanner.threats import (
+from vuln_scanner.threats import (
     get_all_threats,
     get_all_file_patterns_glob,
     get_parser,
     judge,
 )
-from litellm_vuln_scanner.threats.base import VULNERABLE
+from vuln_scanner.threats.base import VULNERABLE
 
 
 def find_dependency_files(root_dir):

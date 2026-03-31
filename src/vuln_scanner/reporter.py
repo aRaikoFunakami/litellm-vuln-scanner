@@ -9,7 +9,7 @@ import os
 from collections import Counter
 from datetime import datetime
 
-from litellm_vuln_scanner.threats import get_all_threats, judge
+from vuln_scanner.threats import get_all_threats, judge
 
 
 CSV_HEADERS = [
