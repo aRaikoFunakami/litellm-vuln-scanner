@@ -1,15 +1,15 @@
 """Report generation in CSV, JSON, Markdown, and console formats.
 
-Supports both LiteLLM (Python) and axios (npm) supply chain attack findings.
+All threat-specific text is sourced from registered threat modules.
 """
 
 import csv
 import json
-import io
 import os
-import sys
 from collections import Counter
 from datetime import datetime
+
+from litellm_vuln_scanner.threats import get_all_threats, judge
 
 
 CSV_HEADERS = [
@@ -60,6 +60,7 @@ def generate_markdown(findings, total_repos, total_files, scanned_repos, output_
     now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     verdicts = Counter(f["verdict"] for f in findings)
     installed_info = installed_info or []
+    threats = get_all_threats()
 
     # Determine scan mode
     has_github = any("/" in r.get("full_name", "") and not r["full_name"].startswith("/")
@@ -84,8 +85,10 @@ def generate_markdown(findings, total_repos, total_files, scanned_repos, output_
     lines.append(f"| 調査対象数 | {total_repos} |")
     lines.append(f"| スキャン済みファイル数 | {total_files} |")
     lines.append(f"| 検出件数 | {len(findings)} |")
-    lines.append(f"| 脆弱バージョン (LiteLLM) | litellm 1.82.7, 1.82.8 |")
-    lines.append(f"| 脆弱バージョン (axios) | axios 1.14.1, 0.30.4 / plain-crypto-js 4.2.1 |")
+    for threat in threats:
+        pkg = threat.direct_package
+        vers = ", ".join(sorted(threat.vulnerable_versions))
+        lines.append(f"| 脆弱バージョン ({threat.name}) | {pkg} {vers} |")
     lines.append("")
 
     lines.append("## 2. 判定基準")
@@ -107,7 +110,7 @@ def generate_markdown(findings, total_repos, total_files, scanned_repos, output_
             if verdicts.get(verdict, 0) > 0:
                 lines.append(f"| {verdict} | {verdicts[verdict]} |")
     else:
-        lines.append("該当なし — litellm および関連パッケージの使用は検出されませんでした。")
+        lines.append("該当なし — 対象パッケージの使用は検出されませんでした。")
     lines.append("")
 
     # Use a running section counter
@@ -148,37 +151,30 @@ def generate_markdown(findings, total_repos, total_files, scanned_repos, output_
         lines.append("ローカル環境で実際にインストールされているパッケージのバージョンです。")
         lines.append("")
 
-        # Split into Python and npm environments
-        python_envs = [e for e in installed_info if not e["environment"].startswith("npm:")]
-        npm_envs = [e for e in installed_info if e["environment"].startswith("npm:")]
-
-        if python_envs:
-            lines.append("### Python 環境（pip freeze / uv pip freeze）")
+        # Group by ecosystem
+        for threat in threats:
+            eco = threat.ecosystem
+            eco_envs = [e for e in installed_info if e.get("ecosystem") == eco]
+            if not eco_envs:
+                continue
+            if eco == "python":
+                lines.append("### Python 環境（pip freeze / uv pip freeze）")
+            elif eco == "npm":
+                lines.append("### npm 環境（npm list / node_modules）")
+            else:
+                lines.append(f"### {eco} 環境")
             lines.append("")
-            for env in python_envs:
-                lines.append(f"#### `{env['environment']}`")
-                lines.append(f"- Python: `{env['python']}`")
+            for env in eco_envs:
+                if eco == "npm":
+                    dir_label = env["environment"].removeprefix("npm:")
+                    lines.append(f"#### `{dir_label}`")
+                else:
+                    lines.append(f"#### `{env['environment']}`")
+                    lines.append(f"- Python: `{env['python']}`")
                 lines.append("")
                 lines.append("| パッケージ名 | インストール済みバージョン | 判定 |")
                 lines.append("|------------|----------------------|------|")
                 for pkg, ver in env["packages"].items():
-                    from litellm_vuln_scanner.dependency_parser import judge
-                    verdict, _ = judge(pkg, ver)
-                    lines.append(f"| {pkg} | {ver} | {verdict} |")
-                lines.append("")
-
-        if npm_envs:
-            lines.append("### npm 環境（npm list / node_modules）")
-            lines.append("")
-            for env in npm_envs:
-                # "npm:smartestiroid-ui/frontend" -> "smartestiroid-ui/frontend"
-                dir_label = env["environment"].removeprefix("npm:")
-                lines.append(f"#### `{dir_label}`")
-                lines.append("")
-                lines.append("| パッケージ名 | インストール済みバージョン | 判定 |")
-                lines.append("|------------|----------------------|------|")
-                for pkg, ver in env["packages"].items():
-                    from litellm_vuln_scanner.dependency_parser import judge
                     verdict, _ = judge(pkg, ver)
                     lines.append(f"| {pkg} | {ver} | {verdict} |")
                 lines.append("")
@@ -207,74 +203,38 @@ def generate_markdown(findings, total_repos, total_files, scanned_repos, output_
     lines.append("")
     lines.append("### 調査背景")
     lines.append("")
-    lines.append("#### LiteLLM サプライチェーン攻撃 (Python/PyPI)")
-    lines.append("")
-    lines.append("PyPI で配布された LiteLLM v1.82.7 および v1.82.8 に、悪意あるコードが混入される")
-    lines.append("サプライチェーン攻撃が確認されました（参照: [GitHub Issue #24518]"
-                 "(https://github.com/BerriAI/litellm/issues/24518)）。")
-    lines.append("本マルウェアはインポート時または `.pth` ファイル経由で自動実行され、")
-    lines.append("SSH鍵、クラウド認証情報（AWS/GCP/Azure）、Kubernetes シークレット、")
-    lines.append(".env ファイル等を窃取し、システムにバックドアを設置します。")
-    lines.append("")
-    lines.append("#### axios サプライチェーン攻撃 (npm)")
-    lines.append("")
-    lines.append("2026年3月31日、npm で配布された axios v1.14.1 および v0.30.4 に、")
-    lines.append("悪意あるパッケージ `plain-crypto-js@4.2.1` が不正な依存として追加されました。")
-    lines.append("StepSecurity と Socket が独立して確認しています。")
-    lines.append("攻撃者は GitHub Actions を経由せず npm CLI から直接公開することで、")
-    lines.append("リリースフローを完全に迂回しました（メンテナーの npm 認証情報が悪用されたと推定）。")
-    lines.append("`plain-crypto-js` はコード中では未使用で、`postinstall` スクリプトにより")
-    lines.append("macOS・Windows・Linux 対応のリモートアクセス型トロイの木馬（RAT）ドロッパーとして機能します。")
-    lines.append("")
+    for threat in threats:
+        lines.extend(threat.report_background())
+        lines.append("")
+
     lines.append("### 調査対象パッケージ")
     lines.append("")
-    lines.append("#### Python エコシステム")
-    lines.append("")
-    lines.append("| 種別 | パッケージ名 | 理由 |")
-    lines.append("|------|------------|------|")
-    lines.append("| 直接依存 | `litellm` | 攻撃対象パッケージ本体 |")
-    lines.append("| 間接依存 | `openhands` | litellm を内部依存として利用 |")
-    lines.append("| 間接依存 | `dspy` | litellm を内部依存として利用 |")
-    lines.append("| 間接依存 | `agentops` | litellm を内部依存として利用 |")
-    lines.append("| 間接依存 | `langfuse` | litellm を内部依存として利用 |")
-    lines.append("| 間接依存 | `mlflow` | litellm を内部依存として利用 |")
-    lines.append("")
-    lines.append("#### npm エコシステム")
-    lines.append("")
-    lines.append("| 種別 | パッケージ名 | 理由 |")
-    lines.append("|------|------------|------|")
-    lines.append("| 直接依存 | `axios` | 攻撃対象パッケージ本体 |")
-    lines.append("| 悪意あるパッケージ | `plain-crypto-js` | axios に不正に追加された依存（RAT ドロッパー） |")
-    lines.append("")
+    for threat in threats:
+        lines.extend(threat.report_target_packages())
+        lines.append("")
+
     lines.append("### 脆弱バージョン")
     lines.append("")
-    lines.append("#### LiteLLM")
-    lines.append("- `litellm==1.82.7`")
-    lines.append("- `litellm==1.82.8`")
-    lines.append("- v1.82.6 以前のバージョンは安全")
-    lines.append("")
-    lines.append("#### axios")
-    lines.append("- `axios@1.14.1`")
-    lines.append("- `axios@0.30.4`")
-    lines.append("- `plain-crypto-js@4.2.1`（存在自体が侵害の証拠）")
-    lines.append("- axios@1.14.0 以前（0.30.x 系は 0.30.3 以前）は安全")
-    lines.append("")
-    lines.append("### マルウェア痕跡（axios 攻撃）")
-    lines.append("")
-    lines.append("StepSecurity が公開した確認対象パス:")
-    lines.append("- **macOS**: `/Library/Caches/com.apple.act.mond`")
-    lines.append("- **Linux**: `/tmp/ld.py`")
-    lines.append("- **Windows**: `%PROGRAMDATA%\\wt.exe`")
-    lines.append("")
+    for threat in threats:
+        lines.extend(threat.report_vulnerable_versions())
+        lines.append("")
+
+    # Malware artifacts (only if any threat provides them)
+    malware_lines = []
+    for threat in threats:
+        ml = threat.report_malware_artifacts()
+        if ml:
+            malware_lines.extend(ml)
+    if malware_lines:
+        lines.extend(malware_lines)
+        lines.append("")
 
     if has_github:
         lines.append("### GitHub リポジトリスキャン手順")
         lines.append("")
         lines.append("1. **リポジトリ一覧取得**: `gh api /user/repos --paginate` により認証ユーザーの全リポジトリを取得")
         lines.append("2. **ファイルツリー取得**: 各リポジトリに対して `gh api /repos/{owner}/{repo}/git/trees/{branch}?recursive=1` でファイル一覧を取得")
-        lines.append("3. **依存ファイル特定**: 以下のファイルパターンに一致するものを抽出")
-        lines.append("   - Python: `requirements*.txt`, `pyproject.toml`, `Pipfile` / `Pipfile.lock`, `poetry.lock`, `setup.py` / `setup.cfg`, `Dockerfile*`")
-        lines.append("   - npm: `package.json`, `package-lock.json`, `yarn.lock`, `pnpm-lock.yaml`")
+        lines.append("3. **依存ファイル特定**: 登録済み脅威モジュールのファイルパターンに一致するものを抽出")
         lines.append("4. **ファイル内容取得**: `gh api /repos/{owner}/{repo}/contents/{path}` で Base64 エンコードされた内容を取得・デコード")
         lines.append("5. **パッケージ検出**: 各ファイル形式に応じたパーサーで対象パッケージの使用有無とバージョンを抽出")
         lines.append("")
@@ -287,26 +247,22 @@ def generate_markdown(findings, total_repos, total_files, scanned_repos, output_
     if has_local:
         lines.append("### ローカルディレクトリスキャン手順")
         lines.append("")
-        lines.append("1. **依存ファイル検索**: 指定ディレクトリ配下を再帰的に走査し、Python/npm 両方のパターンに一致するファイルを収集")
+        lines.append("1. **依存ファイル検索**: 指定ディレクトリ配下を再帰的に走査し、全脅威モジュールのパターンに一致するファイルを収集")
         lines.append("2. **ファイル内容パース**: 各ファイルを直接読み取り、対象パッケージの使用有無とバージョンを抽出")
-        lines.append("3. **システム Python 確認**: `pip freeze` / `uv pip freeze` を実行し、実際にインストールされている Python パッケージを確認")
-        lines.append("4. **仮想環境検出**: ディレクトリ配下の `pyvenv.cfg` を検索し、検出された各仮想環境に対して `pip freeze` を実行")
-        lines.append("5. **node_modules 検査**: `node_modules/plain-crypto-js` ディレクトリの存在を確認（axios 攻撃の証拠）")
-        lines.append("6. **マルウェア痕跡確認**: OS 別の既知マルウェアファイルパスを確認（macOS/Linux/Windows）")
-        lines.append("7. **npm パッケージ確認**: `npm list --json` で実際にインストールされている axios バージョンを確認")
+        lines.append("3. **インストール済みパッケージ確認**: 各脅威モジュールがエコシステム固有のチェックを実行")
+        lines.append("4. **悪意あるディレクトリ検索**: 各脅威モジュールが既知の悪意あるパッケージのディレクトリを検索")
+        lines.append("5. **マルウェア痕跡確認**: 各脅威モジュールが OS 別の既知マルウェアファイルパスを確認")
+        lines.append("6. **バージョン補完**: lockfile や実環境の情報で未指定バージョンを補完")
         lines.append("")
 
     lines.append("### 判定ロジック")
     lines.append("")
     lines.append("| 条件 | 判定 |")
     lines.append("|------|------|")
-    lines.append("| `litellm` のバージョンが `1.82.7` または `1.82.8` | **VULNERABLE** |")
-    lines.append("| `axios` のバージョンが `1.14.1` または `0.30.4` | **VULNERABLE** |")
-    lines.append("| `plain-crypto-js` が検出された（存在自体が侵害の証拠） | **VULNERABLE** |")
-    lines.append("| マルウェア痕跡ファイルが存在する | **VULNERABLE** |")
+    for threat in threats:
+        lines.extend(threat.report_judgment_rows())
     lines.append("| 対象パッケージのバージョンが上記以外で明示されている | SAFE |")
     lines.append("| 対象パッケージがバージョン未指定で記載されている | WARNING |")
-    lines.append("| 間接依存パッケージ（openhands, dspy 等）が検出された | CHECK_INDIRECT |")
     lines.append("")
 
     lines.append("### エビデンス")
@@ -336,7 +292,7 @@ def print_summary(findings, total_repos, total_files):
     print(f"検出件数: {len(findings)}")
 
     if not findings:
-        print("\n✓ 対象パッケージ（litellm / axios / plain-crypto-js）の使用は検出されませんでした。")
+        print("\n✓ 対象パッケージの使用は検出されませんでした。")
         print("=" * 60)
         return
 

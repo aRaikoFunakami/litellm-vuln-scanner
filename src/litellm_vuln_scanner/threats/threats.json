@@ -1,0 +1,113 @@
+[
+  {
+    "name": "litellm",
+    "ecosystem": "python",
+    "direct_packages": {
+      "litellm": ["1.82.7", "1.82.8"]
+    },
+    "indirect_packages": ["openhands", "dspy", "agentops", "langfuse", "mlflow"],
+    "malicious_packages": [],
+    "malicious_dirs": [],
+    "malware_artifacts": {},
+    "note_suffix": "",
+    "report": {
+      "background": [
+        "#### LiteLLM サプライチェーン攻撃 (Python/PyPI)",
+        "",
+        "PyPI で配布された LiteLLM v1.82.7 および v1.82.8 に、悪意あるコードが混入される",
+        "サプライチェーン攻撃が確認されました（参照: [GitHub Issue #24518](https://github.com/BerriAI/litellm/issues/24518)）。",
+        "本マルウェアはインポート時または `.pth` ファイル経由で自動実行され、",
+        "SSH鍵、クラウド認証情報（AWS/GCP/Azure）、Kubernetes シークレット、",
+        ".env ファイル等を窃取し、システムにバックドアを設置します。",
+        ""
+      ],
+      "target_packages": [
+        "#### Python エコシステム",
+        "",
+        "| 種別 | パッケージ名 | 理由 |",
+        "|------|------------|------|",
+        "| 直接依存 | `litellm` | 攻撃対象パッケージ本体 |",
+        "| 間接依存 | `openhands` | litellm を内部依存として利用 |",
+        "| 間接依存 | `dspy` | litellm を内部依存として利用 |",
+        "| 間接依存 | `agentops` | litellm を内部依存として利用 |",
+        "| 間接依存 | `langfuse` | litellm を内部依存として利用 |",
+        "| 間接依存 | `mlflow` | litellm を内部依存として利用 |",
+        ""
+      ],
+      "vulnerable_versions": [
+        "#### LiteLLM",
+        "- `litellm==1.82.7`",
+        "- `litellm==1.82.8`",
+        "- v1.82.6 以前のバージョンは安全",
+        ""
+      ],
+      "malware_artifacts": [],
+      "judgment_rows": [
+        "| `litellm` のバージョンが `1.82.7` または `1.82.8` | **VULNERABLE** |",
+        "| 間接依存パッケージ（openhands, dspy 等）が検出された | CHECK_INDIRECT |"
+      ]
+    }
+  },
+  {
+    "name": "axios",
+    "ecosystem": "npm",
+    "direct_packages": {
+      "axios": ["1.14.1", "0.30.4"]
+    },
+    "indirect_packages": [],
+    "malicious_packages": ["plain-crypto-js"],
+    "malicious_dirs": ["plain-crypto-js"],
+    "malware_artifacts": {
+      "Darwin": ["/Library/Caches/com.apple.act.mond"],
+      "Linux": ["/tmp/ld.py"],
+      "Windows": ["%PROGRAMDATA%\\wt.exe"]
+    },
+    "note_suffix": "（axiosサプライチェーン攻撃）",
+    "report": {
+      "background": [
+        "#### axios サプライチェーン攻撃 (npm)",
+        "",
+        "2026年3月31日、npm で配布された axios v1.14.1 および v0.30.4 に、",
+        "悪意あるパッケージ `plain-crypto-js@4.2.1` が不正な依存として追加されました。",
+        "StepSecurity と Socket が独立して確認しています。",
+        "攻撃者は GitHub Actions を経由せず npm CLI から直接公開することで、",
+        "リリースフローを完全に迂回しました（メンテナーの npm 認証情報が悪用されたと推定）。",
+        "`plain-crypto-js` はコード中では未使用で、`postinstall` スクリプトにより",
+        "macOS・Windows・Linux 対応のリモートアクセス型トロイの木馬（RAT）ドロッパーとして機能します。",
+        ""
+      ],
+      "target_packages": [
+        "#### npm エコシステム",
+        "",
+        "| 種別 | パッケージ名 | 理由 |",
+        "|------|------------|------|",
+        "| 直接依存 | `axios` | 攻撃対象パッケージ本体 |",
+        "| 悪意あるパッケージ | `plain-crypto-js` | axios に不正に追加された依存（RAT ドロッパー） |",
+        ""
+      ],
+      "vulnerable_versions": [
+        "#### axios",
+        "",
+        "- `axios@1.14.1`",
+        "- `axios@0.30.4`",
+        "- `plain-crypto-js@4.2.1`（存在自体が侵害の証拠）",
+        "- axios@1.14.0 以前（0.30.x 系は 0.30.3 以前）は安全",
+        ""
+      ],
+      "malware_artifacts": [
+        "### マルウェア痕跡（axios 攻撃）",
+        "",
+        "StepSecurity が公開した確認対象パス:",
+        "- **macOS**: `/Library/Caches/com.apple.act.mond`",
+        "- **Linux**: `/tmp/ld.py`",
+        "- **Windows**: `%PROGRAMDATA%\\wt.exe`",
+        ""
+      ],
+      "judgment_rows": [
+        "| `axios` のバージョンが `1.14.1` または `0.30.4` | **VULNERABLE** |",
+        "| `plain-crypto-js` が検出された（存在自体が侵害の証拠） | **VULNERABLE** |",
+        "| マルウェア痕跡ファイルが存在する | **VULNERABLE** |"
+      ]
+    }
+  }
+]

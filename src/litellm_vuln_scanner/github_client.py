@@ -5,24 +5,11 @@ import shutil
 import subprocess
 import sys
 import time
-import re
 import base64
 
-# Dependency file patterns to search for
-DEPENDENCY_FILE_PATTERNS = [
-    # Python ecosystem
-    re.compile(r"(^|/)requirements.*\.txt$", re.IGNORECASE),
-    re.compile(r"(^|/)pyproject\.toml$"),
-    re.compile(r"(^|/)Pipfile(\.lock)?$"),
-    re.compile(r"(^|/)poetry\.lock$"),
-    re.compile(r"(^|/)setup\.(py|cfg)$"),
-    re.compile(r"(^|/)Dockerfile"),
-    # npm ecosystem
-    re.compile(r"(^|/)package\.json$"),
-    re.compile(r"(^|/)package-lock\.json$"),
-    re.compile(r"(^|/)yarn\.lock$"),
-    re.compile(r"(^|/)pnpm-lock\.yaml$"),
-]
+# Dependency file patterns — dynamically collected from registered threats.
+from litellm_vuln_scanner.threats import get_all_file_patterns_regex
+DEPENDENCY_FILE_PATTERNS = get_all_file_patterns_regex()
 
 
 # Allowlist of permitted gh subcommands and API path prefixes.

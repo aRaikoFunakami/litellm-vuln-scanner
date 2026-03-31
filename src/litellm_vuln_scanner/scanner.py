@@ -12,7 +12,7 @@ import sys
 import os
 from datetime import datetime
 
-from litellm_vuln_scanner.dependency_parser import get_parser, judge
+from litellm_vuln_scanner.threats import get_parser, judge
 from litellm_vuln_scanner.reporter import generate_csv, generate_json, generate_markdown, print_summary
 
 
